@@ -1,12 +1,12 @@
 import express from 'express';
-import user from './user.router'
-import session from './session.router'
-import googleOAuth from './googleOauth.router'
+import driver from './driver.router';
+import session from './session/driver.session.router';
+import googleOAuth from './driver.googleOauth.router';
 
 const router = express.Router()
 
-router.use(user)
-router.use(session)
+router.use('/driver', driver);
+router.use('/session', session);
 router.use(googleOAuth)
 
 export default router

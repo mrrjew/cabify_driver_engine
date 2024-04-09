@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
 import Session from '../models/user/session';
-import { privateField } from '../models/user/rider';
+import { privateField } from '../models/user/driver';
 import { signJwt } from './token';
 import { omit } from 'lodash'
 

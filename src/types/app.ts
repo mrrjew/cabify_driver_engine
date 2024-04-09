@@ -23,14 +23,5 @@ export default class IService {
     return driver
   }
 
-  async authenticate_rider(userId: any) {
-    const driver = await this.context.models.Driver.findOne({ _id: userId });
-
-    if (!driver) {
-      throw new Error('User not authenticated');
-    }
-
-    return driver
-  }
 
 }

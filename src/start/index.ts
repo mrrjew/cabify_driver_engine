@@ -12,9 +12,8 @@ import initDb from "../models";
 import initServices from "../services";
 import log from "../utils/log";
 import router from "../routes";
-import mongoose from "mongoose";
-import User from "../models/user/rider";
 import setContext from "../middlewares/context";
+import Driver from "../models/user/driver";
 
 export const appContext: IAppContext = {};
 export let app;
@@ -47,7 +46,7 @@ export default async function start(config: Config) {
 
     //clear database
     app.get('/clearDB',async (_,res) => {
-      await User.deleteMany()
+      await Driver.deleteMany()
       res.status(200).send('database cleared')
     })
 
@@ -92,7 +91,7 @@ export default async function start(config: Config) {
     }
     app.post('/uploadprofilepicture', uploadAvatar.single('avatar'),setContext, async (req:FileRequest, res) => {
       try {
-            const user = await User.findOne({_id:req.user._id})
+            const user = await Driver.findOne({_id:req.user._id})
             await user.updateOne({ $set: { profile: { avatar: req.file.path } } }, { new: true, upsert: true });
             await user.save();
             return res.status(201).send('Avatar uploaded');
