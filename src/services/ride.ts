@@ -7,8 +7,8 @@ export default class RideService extends IService {
     super(props);
   }
 
-  // Initialize data
-  async acceptRide(req: any, res: any) {
+  // cancel ride
+  async cancelRide(req: any, res: any) {
     try {
       const user = await this.authenticate_driver(req.user._id);
 
@@ -31,9 +31,24 @@ export default class RideService extends IService {
         return res.status(404).send('ride not round');
       }
 
-      await ride.updateOne({ $set: { status: 'ACCEPTED' } });
+       try {
+         // update ride
+         await axios({
+           method: 'post',
+           url: `${config.app.riderEngineUrl}/ride/update-ride`,
+           data:{
+            rideId:ride._id,
+            status:"CANCELLED",
+            driver:null,
+            rider:null
+           }
+         });
+       } catch (error) {
+         console.error('Error updating ride:', error);
+       }
+
     } catch (e) {
-      return res.status(500).send('error creating ride');
+      return res.status(500).send('error cancelling ride');
     }
   }
 

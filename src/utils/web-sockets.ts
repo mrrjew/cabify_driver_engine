@@ -1,7 +1,5 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import http from 'http';
 import Driver from '../models/user/driver';
-import Ride from '../models/ride';
 import axios from 'axios';
 import config from '../config';
 
@@ -10,11 +8,11 @@ export default async function initWebsocket(server) {
   let rides = [];
   let riders = [];
 
-  // Fetch rides from the ride engine
+  // Fetch rides from the rider engine
   async function fetchRides() {
     try {
       const response = await axios.get(`${config.app.riderEngineUrl}/ride/rides`);
-      rides = response.data.data;
+      rides = response.data;
     } catch (error) {
       console.error('Error fetching rides:', error);
     }
@@ -24,7 +22,7 @@ export default async function initWebsocket(server) {
   async function fetchRiders() {
     try {
       const response = await axios.get(`${config.app.riderEngineUrl}/auth/rider/riders`);
-      riders = response.data.data;
+      riders = response.data;
     } catch (error) {
       console.error('Error fetching riders:', error);
     }
@@ -37,11 +35,11 @@ export default async function initWebsocket(server) {
     console.log('Client connected:', socket.id);
 
     // Event handler for updating driver location
-    socket.on('updateLocation', async(driverInfo) => {
+    socket.on('updateLocation', async (driverInfo) => {
       const { _id, latitude, longitude } = driverInfo;
       const driver = await Driver.findOneAndUpdate({ _id }, { $set: { latitude, longitude } });
       await driver.save();
-      io.emit('updateLocation',driver);
+      io.emit('updateLocation', driver);
     });
 
     // Event handler to show pending ride for driver
@@ -54,7 +52,7 @@ export default async function initWebsocket(server) {
     socket.on('accept', async (driverInfo) => {
       try {
         const driver = await Driver.findOne({ _id: driverInfo._id });
-        const ride = rides.find((ride) => ride.driver === driver._id && ride.status === 'PENDING');
+        const ride = rides.find((ride) => ride.driver == driver._id && ride.status == 'PENDING');
         if (!ride) {
           throw new Error('No pending ride found for the driver');
         }
@@ -65,6 +63,7 @@ export default async function initWebsocket(server) {
 
         const apiUrl = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${riderLat},${riderLng}&destinations=${driverLat},${driverLng}&key=${config.maps.api_key}`;
         const response = await axios.get(apiUrl);
+        console.log(response.data);
         const distance = response.data.rows[0].elements[0].distance;
         const duration = response.data.rows[0].elements[0].duration;
 
@@ -78,6 +77,26 @@ export default async function initWebsocket(server) {
       }
     });
 
+    // get current distance and time
+    socket.on('getCurrentDistanceAndDuration', async (ride,currentLocation,destination) => {
+      try {
+        const { latitude: currentLocationLat, longitude: currentLocationLng } = currentLocation;
+        const { latitude: destinationLat, longitude: destinationLng } = destination;
+
+        const apiUrl = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${currentLocationLat},${currentLocationLng}&destinations=${destinationLat},${destinationLng}&key=${config.maps.api_key}`;
+        const response = await axios.get(apiUrl);
+        console.log(response.data);
+        const distance = response.data.rows[0].elements[0].distance;
+        const duration = response.data.rows[0].elements[0].duration;
+
+        io.emit('getCurrentDistanceAndDuration', {
+          distance,
+          duration,
+        });
+      } catch (error) {
+        console.error('Error getting current distance and duration:', error);
+      }
+    });
     // Handle disconnection
     socket.on('disconnect', () => {
       console.log('Client disconnected:', socket.id);

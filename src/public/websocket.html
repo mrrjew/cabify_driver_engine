@@ -12,6 +12,22 @@
         // Create a Socket.IO connection to your server
         var socket = io('http://localhost:1080'); // Replace with your server URL
 
+        // // update driver location
+        // var driver = { _id: '661be79d6d3c046ba79437de' ,longitude:21,latitude:27};
+        // socket.emit("updateLocation",driver)
+
+        // socket.on('updateLocation', function(data){
+        //     document.getElementById('distance').innerHTML = 'latitude: ' + data.latitude + "" + 'longitude' + data.longitude;
+        // })
+
+        // show current ride
+        var driver = { _id: '661be79d6d3c046ba79437de'};
+        socket.emit("showPendingRide",driver)
+
+        socket.on('showPendingRide', function(data){
+            document.getElementById('distance').innerHTML = data._id
+        })
+
         // Event handler for when the Socket.IO connection is established
         socket.on('connect', function() {
             console.log('Socket.IO connection opened');
@@ -36,7 +52,7 @@
 
         // Function to send 'accept' event to server
         function acceptRide() {
-            var driver = { _id: '' }; // Sample driver data
+            var driver = { _id: '661be79d6d3c046ba79437de' }; // Sample driver data
             socket.emit('accept', driver);
         }
     </script>
