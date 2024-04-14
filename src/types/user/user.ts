@@ -64,6 +64,7 @@ export interface IUserRating {
 
 // main user type
 export interface IUser {
+  currentRider?: Types.ObjectId
   firstname?: string;
   lastname?: string;
   othernames?:string;

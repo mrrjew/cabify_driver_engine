@@ -1,29 +1,41 @@
 import IService, { IAppContext } from "../types/app";
+import config from "../config";
+import axios from "axios";
 
 export default class RideService extends IService {
-    constructor(props:IAppContext){
-        super(props)
-    }
+  constructor(props: IAppContext) {
+    super(props);
+  }
 
-    async requestRide(req:any,res:any){
-        const user = await this.authenticate_user(req.user._id)
+  // Initialize data
+  async acceptRide(req: any, res: any) {
+    try {
+      const user = await this.authenticate_driver(req.user._id);
 
-        if(!user){
-            return res.status(404).send("user not authenticated")
-        }
-        
-        const {fare,pickupLocation,destination} = req.body
-        
-        if(!fare || !pickupLocation || !destination){
-            return res.status(500).send("missing required fields")
-        }
-        
-        try{
-            const ride = await this.models.Ride.create({...req.body})
-            await ride.save()
-            return res.status(201).json({message:"ride created", ride})
-        }catch(e){
-            return res.status(500).send("error creating ride")
-        }
+      if (!user) {
+        return res.status(401).send('user not authenticated');
+      }
+
+      let rides:any
+      try {
+        // fetch rides from rider engine
+        const response = await axios.get(`${config.app.riderEngineUrl}/ride/rides`);
+        rides = response.data.data;
+      } catch (error) {
+        console.error('Error fetching rides:', error);
+      }
+
+      // find specific ride assigned to driver
+      const ride = rides.find((ride: any) => ride.driver === user._id && ride.status === 'PENDING');
+      if (!ride) {
+        return res.status(404).send('ride not round');
+      }
+
+      await ride.updateOne({ $set: { status: 'ACCEPTED' } });
+    } catch (e) {
+      return res.status(500).send('error creating ride');
     }
+  }
+
+  async startRide() {}
 }

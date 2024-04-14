@@ -1,71 +1,86 @@
-import { Server as SocketIOServer, Socket } from "socket.io";
-import {app} from '../start/index'
-import http from 'http'
+import { Server as SocketIOServer, Socket } from 'socket.io';
+import http from 'http';
+import Driver from '../models/user/driver';
+import Ride from '../models/ride';
+import axios from 'axios';
+import config from '../config';
 
-const server = http.createServer(app)
+export default async function initWebsocket(server) {
+  const io = new SocketIOServer(server);
+  let rides = [];
+  let riders = [];
 
-const io = new SocketIOServer(server)
+  // Fetch rides from the ride engine
+  async function fetchRides() {
+    try {
+      const response = await axios.get(`${config.app.riderEngineUrl}/ride/rides`);
+      rides = response.data.data;
+    } catch (error) {
+      console.error('Error fetching rides:', error);
+    }
+  }
 
-const driverLocations: Map<string, [number, number]> = new Map();
-const passengerLocations: Map<string, [number, number]> = new Map();
+  // Fetch riders from the rider engine
+  async function fetchRiders() {
+    try {
+      const response = await axios.get(`${config.app.riderEngineUrl}/auth/rider/riders`);
+      riders = response.data.data;
+    } catch (error) {
+      console.error('Error fetching riders:', error);
+    }
+  }
 
-io.on('connection', (socket:Socket) => {
+  // Initialize data
+  await Promise.all([fetchRides(), fetchRiders()]);
+
+  io.on('connection', async (socket: Socket) => {
     console.log('Client connected:', socket.id);
 
-    // Handle driver location updates
-    socket.on('driverLocationUpdate', (location: [number, number]) => {
-        // Store driver location
-        driverLocations.set(socket.id, location);
+    // Event handler for updating driver location
+    socket.on('updateLocation', async(driverInfo) => {
+      const { _id, latitude, longitude } = driverInfo;
+      const driver = await Driver.findOneAndUpdate({ _id }, { $set: { latitude, longitude } });
+      await driver.save();
+      io.emit('updateLocation',driver);
     });
 
-    // Handle passenger location updates
-    socket.on('passengerLocationUpdate', (location: [number, number]) => {
-        // Store passenger location
-        passengerLocations.set(socket.id, location);
+    // Event handler to show pending ride for driver
+    socket.on('showPendingRide', (driverInfo) => {
+      const pendingRide = rides.find((ride) => ride.driver === driverInfo._id && ride.status === 'PENDING');
+      io.emit('showPendingRide', pendingRide);
     });
 
-        // Handle ride request
-        socket.on('requestRide', () => {
-            // Calculate distance between passenger and drivers
-            const passengerLocation = passengerLocations.get(socket.id);
-            const availableDrivers = [...driverLocations.entries()];
-            const distances = availableDrivers.map(([driverId, driverLocation]) => ({
-                driverId,
-                distance: calculateDistance(passengerLocation, driverLocation)
-            }));
-    
-            // Send distances to passenger
-            socket.emit('driverDistances', distances);
+    // Event handler for accepting a ride
+    socket.on('accept', async (driverInfo) => {
+      try {
+        const driver = await Driver.findOne({ _id: driverInfo._id });
+        const ride = rides.find((ride) => ride.driver === driver._id && ride.status === 'PENDING');
+        if (!ride) {
+          throw new Error('No pending ride found for the driver');
+        }
+
+        const rider = riders.find((rider) => rider._id === ride.rider);
+        const { latitude: riderLat, longitude: riderLng } = rider;
+        const { latitude: driverLat, longitude: driverLng } = driver;
+
+        const apiUrl = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${riderLat},${riderLng}&destinations=${driverLat},${driverLng}&key=${config.maps.api_key}`;
+        const response = await axios.get(apiUrl);
+        const distance = response.data.rows[0].elements[0].distance;
+        const duration = response.data.rows[0].elements[0].duration;
+
+        io.emit('accept', {
+          driver,
+          distance,
+          duration,
         });
-
-           // Handle disconnection
-    socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
-        driverLocations.delete(socket.id);
-        passengerLocations.delete(socket.id);
+      } catch (error) {
+        console.error('Error accepting ride:', error);
+      }
     });
 
-    function calculateDistance(location1: [number, number], location2: [number, number]): number {
-        const [lat1, lon1] = location1;
-        const [lat2, lon2] = location2;
-    
-        const R = 6371; // Radius of the Earth in kilometers
-    
-        const dLat = deg2rad(lat2 - lat1);
-        const dLon = deg2rad(lon2 - lon1);
-    
-        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                  Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
-                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    
-        const distance = R * c; // Distance in kilometers
-        return distance;
-    }
-    
-    function deg2rad(deg: number): number {
-        return deg * (Math.PI / 180);
-    }
-    
-})
+    // Handle disconnection
+    socket.on('disconnect', () => {
+      console.log('Client disconnected:', socket.id);
+    });
+  });
+}

@@ -7,6 +7,7 @@ export const privateField = ['password', '__v', 'verificationCode', 'passwordRes
 
 const driverSchema = new Schema<IUserDocument>(
   {
+    currentRider: {type: Schema.Types.ObjectId},
     firstname: { type: String },
     lastname: { type: String },
     othernames: { type: String },
